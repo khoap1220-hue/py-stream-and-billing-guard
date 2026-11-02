@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "py-stream-and-billing-guard"
+version = "0.2.0"
+description = "Defensive SSE cross-chunk stream framing normalizer, zero-decimal currency billing guard, and transactional commit-before-cleanup utilities for Python & FastAPI."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [
+  { name = "Khoa Phan (@khoap1220-hue)" }
+]
+keywords = ["fastapi", "stripe", "sse", "streaming", "fintech", "security"]
