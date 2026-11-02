@@ -370,3 +370,39 @@ def commit_before_external_cleanup(
         return False
     external_cleanup_fn()
     return True
+
+
+def allocate_bps_split(total_units: int, weights_bps: Sequence[int]) -> list[int]:
+    """
+    Allocates total_units across multiple recipients based on basis points (bps)
+    weights using the Largest Remainder Method (Hare-Niemeyer method).
+    Guarantees zero-remainder loss: sum(result) == total_units in 100% of cases.
+    """
+    if isinstance(total_units, bool) or not isinstance(total_units, int):
+        raise TypeError("total_units must be an integer")
+    if total_units < 0:
+        raise ValueError("total_units must be a non-negative integer")
+    if not weights_bps:
+        raise ValueError("weights_bps cannot be empty")
+    for w in weights_bps:
+        if isinstance(w, bool) or not isinstance(w, int) or w < 0:
+            raise ValueError("All weights in weights_bps must be non-negative integers")
+    if sum(weights_bps) != 10_000:
+        raise ValueError(f"sum(weights_bps) must equal 10,000, got {sum(weights_bps)}")
+
+    shares = [0] * len(weights_bps)
+    remainders = []
+    for idx, w in enumerate(weights_bps):
+        floor_val, rem = divmod(total_units * w, 10_000)
+        shares[idx] = floor_val
+        remainders.append((rem, idx))
+
+    # Sort descending by remainder, breaking ties stably by smaller index
+    remainders.sort(key=lambda item: (-item[0], item[1]))
+
+    surplus = total_units - sum(shares)
+    for i in range(surplus):
+        target_idx = remainders[i][1]
+        shares[target_idx] += 1
+
+    return shares

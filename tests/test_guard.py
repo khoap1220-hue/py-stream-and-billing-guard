@@ -4,6 +4,7 @@ from stream_billing_guard import (
     BillingValidationError,
     CurrencyNormalizer,
     SSEFrameAssembler,
+    allocate_bps_split,
     commit_before_external_cleanup,
     scan_sse_stream_for_leaks,
     validate_subscription_transition,
@@ -118,6 +119,41 @@ class TestStreamAndBillingGuard(unittest.TestCase):
         self.assertTrue(ok_pass)
         self.assertEqual(side_effects, ["deleted_s3_object"])
 
+
+
+    def test_fee_split_allocator_with_zero_stroop_remainder_conservation(self) -> None:
+        # 100 stroops split 3333 / 3333 / 3334 bps
+        weights = [3333, 3333, 3334]
+        res100 = allocate_bps_split(100, weights)
+        self.assertEqual(sum(res100), 100)
+        self.assertEqual(res100, [33, 33, 34])
+
+        # 5000 / 3000 / 2000
+        w532 = [5000, 3000, 2000]
+        self.assertEqual(allocate_bps_split(1000, w532), [500, 300, 200])
+
+        # Edge cases: 0, 1, 3, 10_000_001 stroops
+        for amount in [0, 1, 3, 7, 10, 999, 10_000_001]:
+            split = allocate_bps_split(amount, weights)
+            self.assertEqual(sum(split), amount, f"Remainder conservation failed for amount {amount}")
+
+        # Invalid weights sum != 10_000
+        with self.assertRaises(ValueError):
+            allocate_bps_split(100, [5000, 4999])
+        with self.assertRaises(ValueError):
+            allocate_bps_split(100, [5000, 5001])
+
+        # Negative inputs
+        with self.assertRaises(ValueError):
+            allocate_bps_split(-1, [10000])
+        with self.assertRaises(ValueError):
+            allocate_bps_split(100, [-1000, 11000])
+
+        # Type errors
+        with self.assertRaises(TypeError):
+            allocate_bps_split(True, [10000])  # type: ignore[arg-type]
+        with self.assertRaises(TypeError):
+            allocate_bps_split(100.5, [10000])  # type: ignore[arg-type]
 
 if __name__ == "__main__":
     unittest.main()
