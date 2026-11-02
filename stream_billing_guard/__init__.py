@@ -8,7 +8,10 @@ from .core import (
     SSEFrameAssembler,
     SSEScanReport,
     SubscriptionTransitionReport,
+    allocate_bps_split,
     commit_before_external_cleanup,
+    from_stroops,
+    to_stroops,
     scan_sse_stream_for_leaks,
     validate_subscription_transition,
 )
@@ -23,7 +26,10 @@ __all__ = [
     "SSEFrameAssembler",
     "SSEScanReport",
     "SubscriptionTransitionReport",
+    "allocate_bps_split",
     "commit_before_external_cleanup",
+    "from_stroops",
+    "to_stroops",
     "scan_sse_stream_for_leaks",
     "validate_subscription_transition",
 ]

@@ -119,5 +119,41 @@ class TestStreamAndBillingGuard(unittest.TestCase):
         self.assertEqual(side_effects, ["deleted_s3_object"])
 
 
+
+    def test_cli_stroops_and_split_bps_flags(self) -> None:
+        import json
+        import subprocess
+        import sys
+
+        # Test --stroops 12.5
+        proc = subprocess.run(
+            [sys.executable, "-m", "stream_billing_guard", "--stroops", "12.5"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        data = json.loads(proc.stdout)
+        self.assertEqual(data["stroops"], 125_000_000)
+        self.assertEqual(data["amount"], "12.5")
+
+        # Test --stroops 10 --split-bps 5000,3000,2000
+        proc2 = subprocess.run(
+            [sys.executable, "-m", "stream_billing_guard", "--stroops", "10", "--split-bps", "5000,3000,2000"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        data2 = json.loads(proc2.stdout)
+        self.assertEqual(data2["stroops"], 100_000_000)
+        self.assertEqual(data2["split_stroops"], [50_000_000, 30_000_000, 20_000_000])
+
+        # Test invalid flags return non-zero exit code
+        proc_err = subprocess.run(
+            [sys.executable, "-m", "stream_billing_guard", "--stroops", "invalid"],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(proc_err.returncode, 2)
+
 if __name__ == "__main__":
     unittest.main()

@@ -6,7 +6,9 @@ from typing import Any
 
 from .core import (
     CurrencyNormalizer,
+    allocate_bps_split,
     scan_sse_stream_for_leaks,
+    to_stroops,
     validate_subscription_transition,
 )
 
@@ -16,11 +18,53 @@ def main(argv: list[str] | None = None) -> int:
     if not args:
         sys.stderr.write(
             "Usage:\n"
+            "  python -m stream_billing_guard --stroops <amount> [--split-bps <weights>]\n"
+            "  python -m stream_billing_guard --split-bps <weights>\n"
             "  python -m stream_billing_guard audit-catalog '<json-catalog>'\n"
             "  python -m stream_billing_guard prorate <currency> <minor_units> <active_sec> <period_sec> [fee_bps]\n"
             "  python -m stream_billing_guard scan-sse '<chunks-json>' '<patterns-json>'\n"
         )
         return 1
+
+    # Check for CLI flags --stroops and --split-bps
+    if "--stroops" in args or "--split-bps" in args:
+        try:
+            stroops_val: int | None = None
+            amount_str: str | None = None
+            if "--stroops" in args:
+                idx = args.index("--stroops")
+                if idx + 1 >= len(args):
+                    sys.stderr.write("Missing value for --stroops\n")
+                    return 2
+                amount_str = args[idx + 1]
+                stroops_val = to_stroops(amount_str)
+
+            weights: list[int] | None = None
+            if "--split-bps" in args:
+                idx_bps = args.index("--split-bps")
+                if idx_bps + 1 >= len(args):
+                    sys.stderr.write("Missing value for --split-bps\n")
+                    return 2
+                bps_str = args[idx_bps + 1]
+                weights = [int(w.strip()) for w in bps_str.split(",") if w.strip()]
+
+            out: dict[str, Any] = {}
+            if stroops_val is not None:
+                out["amount"] = amount_str
+                out["stroops"] = stroops_val
+                if weights is not None:
+                    out["weights_bps"] = weights
+                    out["split_stroops"] = allocate_bps_split(stroops_val, weights)
+            elif weights is not None:
+                default_units = 10_000
+                out["weights_bps"] = weights
+                out["split_units"] = allocate_bps_split(default_units, weights)
+
+            print(json.dumps(out, indent=2))
+            return 0
+        except Exception as err:
+            sys.stderr.write(f"Error processing flags: {err}\n")
+            return 2
 
     cmd = args[0]
     if cmd == "audit-catalog":
@@ -45,7 +89,7 @@ def main(argv: list[str] | None = None) -> int:
             active_schedule_id="sub_sched_live_01",
             schedule_released=False,
         )
-        out: dict[str, Any] = {
+        out = {
             "catalog_count": len(formatted),
             "formatted_prices": formatted,
             "unreleased_schedule_guard_blocked": not transition.allowed,
