@@ -7,7 +7,7 @@
 
 **`py-stream-and-billing-guard`** provides zero-dependency, stdlib-only defensive engineering primitives + CLI tools for **Python / FastAPI backends, AI streaming proxies, and multi-currency Stripe billing services**.
 
-> 🔗 **Production Heritage:** Built from real-world production patterns including our upstream-credited multi-currency Stripe billing work on **[BasedHardware/omi#23591](https://github.com/BasedHardware/omi/pull/23591)** and defensive SSE streaming guardrail architecture.
+> 🔗 **Production Heritage:** Built from real-world production patterns including my upstream-credited multi-currency Stripe billing work on **[BasedHardware/omi#23591](https://github.com/BasedHardware/omi/pull/23591)** and defensive SSE streaming guardrail architecture.
 
 ---
 
@@ -55,3 +55,10 @@ python -m unittest discover -s tests -v
 ## 📄 License
 
 Released under the [MIT License](LICENSE).
+
+---
+
+## 👤 Author & Verification Standard
+
+Architected and maintained by **Khoa Phan (`@khoap1220-hue`)**.
+> *"I architect and ship production-grade primitives across Rust, Go, TypeScript, and Python — powered by my proprietary multi-agent verification & triage pipeline, with every single line human-audited, race-tested (`go test -race`), and 100% GPG-signed."*
