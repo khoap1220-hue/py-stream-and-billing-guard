@@ -38,6 +38,10 @@ class TestStreamAndBillingGuard(unittest.TestCase):
         self.assertEqual(CurrencyNormalizer.compute_basis_point_fee(1999, 290), 58)
         # Half-cycle proration of 3000 JPY over 15/30 days = 1500 JPY
         self.assertEqual(CurrencyNormalizer.prorate_minor_units(3000, 15, 30), 1500)
+        with self.assertRaises(BillingValidationError):
+            CurrencyNormalizer.prorate_minor_units(100.5, 15, 30)  # type: ignore[arg-type]
+        with self.assertRaises(BillingValidationError):
+            CurrencyNormalizer.prorate_minor_units(True, 1, 1)
 
     def test_fail_closed_on_unconfigured_or_invalid_currency(self) -> None:
         normalizer = CurrencyNormalizer({"USD": 1000})
@@ -86,6 +90,9 @@ class TestStreamAndBillingGuard(unittest.TestCase):
         self.assertTrue(rep.blocked)
         self.assertEqual(rep.frame_count, 2)
         self.assertEqual(rep.matched_patterns, ("sk_live_9988776655",))
+
+        id_leak = scan_sse_stream_for_leaks([b"id: sk_live_id_secret\nevent: ping\n\n"], ["sk_live_id_secret"])
+        self.assertTrue(id_leak.blocked)
 
         assembler = SSEFrameAssembler()
         events = assembler.feed_events(chunks[0] + chunks[1])

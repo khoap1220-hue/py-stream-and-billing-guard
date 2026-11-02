@@ -155,12 +155,17 @@ class CurrencyNormalizer:
         """
         Computes exact integer half-up proration (`minor_units * active_seconds / period_seconds`).
         """
-        if minor_units < 0:
-            raise BillingValidationError("minor_units cannot be negative")
-        if period_seconds <= 0:
-            raise BillingValidationError("period_seconds must be positive")
-        if active_seconds < 0 or active_seconds > period_seconds:
-            raise BillingValidationError("active_seconds must be within [0, period_seconds]")
+        if isinstance(minor_units, bool) or not isinstance(minor_units, int) or minor_units < 0:
+            raise BillingValidationError("minor_units must be a non-negative integer")
+        if isinstance(period_seconds, bool) or not isinstance(period_seconds, int) or period_seconds <= 0:
+            raise BillingValidationError("period_seconds must be a positive integer")
+        if (
+            isinstance(active_seconds, bool)
+            or not isinstance(active_seconds, int)
+            or active_seconds < 0
+            or active_seconds > period_seconds
+        ):
+            raise BillingValidationError("active_seconds must be an integer within [0, period_seconds]")
         return (minor_units * active_seconds + (period_seconds // 2)) // period_seconds
 
 
@@ -270,7 +275,12 @@ class SSEFrameAssembler:
     def flush(self) -> list[str]:
         remaining = self._buffer.strip()
         self._buffer = ""
-        return [remaining] if remaining else []
+        if not remaining:
+            return []
+        non_comment_lines = [
+            ln for ln in remaining.split("\n") if ln.strip() and not ln.lstrip().startswith(":")
+        ]
+        return [remaining] if non_comment_lines else []
 
     @staticmethod
     def parse_frame(frame: str) -> ParsedSSEEvent:
@@ -322,8 +332,8 @@ def scan_sse_stream_for_leaks(
 ) -> SSEScanReport:
     """
     Reassembles arbitrary transport chunks into complete SSE frames and scans both
-    individual frame data and the cumulative stream for forbidden tokens/secrets
-    that may have been split across packet or event boundaries.
+    extracted `data:` payloads and raw frame metadata (`id:`, `event:`, or unprefixed lines)
+    for forbidden tokens/secrets that may have been split across packet or event boundaries.
     """
     assembler = SSEFrameAssembler()
     all_frames: list[str] = []
@@ -331,10 +341,12 @@ def scan_sse_stream_for_leaks(
         all_frames.extend(assembler.feed(chunk))
     all_frames.extend(assembler.flush())
 
-    reconstructed = SSEFrameAssembler.extract_data_payload(all_frames)
+    reconstructed_data = SSEFrameAssembler.extract_data_payload(all_frames)
+    raw_joined = "\n".join(all_frames)
+    reconstructed = reconstructed_data if reconstructed_data else raw_joined
     matched: list[str] = []
     for pat in forbidden_patterns:
-        if pat and pat in reconstructed and pat not in matched:
+        if pat and (pat in reconstructed_data or pat in raw_joined) and pat not in matched:
             matched.append(pat)
 
     return SSEScanReport(
