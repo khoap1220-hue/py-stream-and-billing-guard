@@ -16,6 +16,66 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Iterable, Mapping, Sequence
 
+from decimal import Decimal, ROUND_HALF_EVEN
+
+STROOPS_PER_UNIT: int = 10_000_000
+MAX_STELLAR_INT64: int = 9_223_372_036_854_775_807
+MIN_STELLAR_INT64: int = 0
+
+
+def to_stroops(amount: str | int | Decimal) -> int:
+    """
+    Converts a Stellar asset or XLM amount to integer stroops (1 unit = 10^7 stroops).
+    Enforces exact 7-decimal precision, signed 64-bit int64 bounds, and rejects float
+    inputs with TypeError to avoid IEEE-754 precision loss.
+    """
+    if isinstance(amount, bool) or not isinstance(amount, (str, int, Decimal)):
+        raise TypeError("Amount must be a str, int, or Decimal; float is strictly forbidden")
+
+    if isinstance(amount, int):
+        dec = Decimal(amount)
+    elif isinstance(amount, str):
+        clean = amount.strip()
+        if not clean:
+            raise ValueError("Amount cannot be empty")
+        if "." in clean:
+            parts = clean.split(".", 1)
+            if len(parts[1]) > 7:
+                raise ValueError("Stellar asset precision exceeds 7 decimal places")
+        try:
+            dec = Decimal(clean)
+        except Exception as e:
+            raise ValueError(f"Invalid numeric string for Stellar amount: {amount!r}") from e
+    else:  # Decimal
+        dec = amount
+        dec_exp = dec.as_tuple().exponent
+        if isinstance(dec_exp, int) and dec_exp < -7:
+            raise ValueError("Stellar asset precision exceeds 7 decimal places")
+
+    stroops_dec = (dec * Decimal(STROOPS_PER_UNIT)).to_integral_value(rounding=ROUND_HALF_EVEN)
+    stroops = int(stroops_dec)
+
+    if not (MIN_STELLAR_INT64 <= stroops <= MAX_STELLAR_INT64):
+        raise ValueError(
+            f"Stroop amount {stroops} outside signed 64-bit bounds [{MIN_STELLAR_INT64}, {MAX_STELLAR_INT64}]"
+        )
+    return stroops
+
+
+def from_stroops(stroops: int) -> str:
+    """
+    Converts integer stroops back to a canonical 7-decimal Stellar string representation.
+    """
+    if isinstance(stroops, bool) or not isinstance(stroops, int):
+        raise TypeError("Stroops must be an integer")
+    if not (MIN_STELLAR_INT64 <= stroops <= MAX_STELLAR_INT64):
+        raise ValueError(
+            f"Stroop amount {stroops} outside signed 64-bit bounds [{MIN_STELLAR_INT64}, {MAX_STELLAR_INT64}]"
+        )
+    major, rem = divmod(stroops, STROOPS_PER_UNIT)
+    return f"{major}.{rem:07d}"
+
+
 
 class BillingValidationError(ValueError):
     """Raised when a currency, plan, schedule state, or amount fails fail-closed validation."""

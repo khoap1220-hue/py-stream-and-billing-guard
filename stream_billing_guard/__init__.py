@@ -9,6 +9,8 @@ from .core import (
     SSEScanReport,
     SubscriptionTransitionReport,
     commit_before_external_cleanup,
+    from_stroops,
+    to_stroops,
     scan_sse_stream_for_leaks,
     validate_subscription_transition,
 )
@@ -24,6 +26,8 @@ __all__ = [
     "SSEScanReport",
     "SubscriptionTransitionReport",
     "commit_before_external_cleanup",
+    "from_stroops",
+    "to_stroops",
     "scan_sse_stream_for_leaks",
     "validate_subscription_transition",
 ]

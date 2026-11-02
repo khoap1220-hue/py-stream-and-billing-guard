@@ -5,6 +5,8 @@ from stream_billing_guard import (
     CurrencyNormalizer,
     SSEFrameAssembler,
     commit_before_external_cleanup,
+    from_stroops,
+    to_stroops,
     scan_sse_stream_for_leaks,
     validate_subscription_transition,
 )
@@ -118,6 +120,57 @@ class TestStreamAndBillingGuard(unittest.TestCase):
         self.assertTrue(ok_pass)
         self.assertEqual(side_effects, ["deleted_s3_object"])
 
+
+
+    def test_stellar_stroops_converter_and_precision_guard(self) -> None:
+        from decimal import Decimal
+        # 1 XLM = 10^7 stroops
+        self.assertEqual(to_stroops("1.0000000"), 10_000_000)
+        self.assertEqual(from_stroops(10_000_000), "1.0000000")
+
+        # 1 stroop
+        self.assertEqual(to_stroops("0.0000001"), 1)
+        self.assertEqual(from_stroops(1), "0.0000001")
+
+        # 0 stroop
+        self.assertEqual(to_stroops("0"), 0)
+        self.assertEqual(to_stroops(0), 0)
+        self.assertEqual(from_stroops(0), "0.0000000")
+
+        # Decimal and int inputs
+        self.assertEqual(to_stroops(Decimal("12.5")), 125_000_000)
+        self.assertEqual(to_stroops(10), 100_000_000)
+
+        # Max int64 boundary
+        max_int64 = 9_223_372_036_854_775_807
+        self.assertEqual(to_stroops("922337203685.4775807"), max_int64)
+        self.assertEqual(from_stroops(max_int64), "922337203685.4775807")
+
+        # Bounds overflow/underflow
+        with self.assertRaises(ValueError):
+            to_stroops("922337203685.4775808")
+        with self.assertRaises(ValueError):
+            to_stroops("-1")
+        with self.assertRaises(ValueError):
+            from_stroops(-1)
+        with self.assertRaises(ValueError):
+            from_stroops(max_int64 + 1)
+
+        # Rejection of >7 decimal places
+        with self.assertRaises(ValueError):
+            to_stroops("1.00000001")
+        with self.assertRaises(ValueError):
+            to_stroops(Decimal("0.12345678"))
+
+        # Rejection of float to avoid IEEE-754 precision loss
+        with self.assertRaises(TypeError):
+            to_stroops(1.5)  # type: ignore[arg-type]
+        with self.assertRaises(TypeError):
+            to_stroops(True)  # type: ignore[arg-type]
+        with self.assertRaises(TypeError):
+            from_stroops(10.5)  # type: ignore[arg-type]
+        with self.assertRaises(TypeError):
+            from_stroops(True)  # type: ignore[arg-type]
 
 if __name__ == "__main__":
     unittest.main()
