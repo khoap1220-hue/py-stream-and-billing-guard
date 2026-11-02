@@ -243,9 +243,11 @@ class SSEFrameAssembler:
     split-chunk framing bypasses in downstream AI safety guardrails.
     """
 
-    def __init__(self, max_buffer_chars: int = 262_144) -> None:
+    def __init__(self, max_buffer_chars: int = 262_144, skip_control_events: bool = False) -> None:
         self._buffer: str = ""
         self._max_buffer_chars = max_buffer_chars
+        self.skip_control_events = skip_control_events
+        self.last_event_id: str | None = None
 
     def feed(self, chunk: str | bytes) -> list[str]:
         if isinstance(chunk, bytes):
@@ -261,10 +263,15 @@ class SSEFrameAssembler:
         complete_frames: list[str] = []
         while "\n\n" in self._buffer:
             frame, self._buffer = self._buffer.split("\n\n", 1)
+            parsed = self.parse_frame(frame)
+            if parsed.event_id is not None:
+                self.last_event_id = parsed.event_id
             non_comment_lines = [
                 ln for ln in frame.split("\n") if ln.strip() and not ln.lstrip().startswith(":")
             ]
             if non_comment_lines:
+                if self.skip_control_events and parsed.event in ("open", "byebye"):
+                    continue
                 complete_frames.append(frame)
         return complete_frames
 
@@ -277,10 +284,17 @@ class SSEFrameAssembler:
         self._buffer = ""
         if not remaining:
             return []
+        parsed = self.parse_frame(remaining)
+        if parsed.event_id is not None:
+            self.last_event_id = parsed.event_id
         non_comment_lines = [
             ln for ln in remaining.split("\n") if ln.strip() and not ln.lstrip().startswith(":")
         ]
-        return [remaining] if non_comment_lines else []
+        if not non_comment_lines:
+            return []
+        if self.skip_control_events and parsed.event in ("open", "byebye"):
+            return []
+        return [remaining]
 
     @staticmethod
     def parse_frame(frame: str) -> ParsedSSEEvent:
@@ -370,3 +384,6 @@ def commit_before_external_cleanup(
         return False
     external_cleanup_fn()
     return True
+
+
+SSEChunkNormalizer = SSEFrameAssembler

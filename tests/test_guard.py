@@ -3,6 +3,7 @@ import unittest
 from stream_billing_guard import (
     BillingValidationError,
     CurrencyNormalizer,
+    SSEChunkNormalizer,
     SSEFrameAssembler,
     commit_before_external_cleanup,
     scan_sse_stream_for_leaks,
@@ -118,6 +119,44 @@ class TestStreamAndBillingGuard(unittest.TestCase):
         self.assertTrue(ok_pass)
         self.assertEqual(side_effects, ["deleted_s3_object"])
 
+
+
+    def test_stellar_horizon_sse_cursor_resumption_and_heartbeat_filter(self) -> None:
+        normalizer = SSEChunkNormalizer(skip_control_events=True)
+        self.assertIsNone(normalizer.last_event_id)
+
+        # Chunk 1: event: open handshake with id token
+        chunk1 = b": hello\nevent: open\nid: 1000\ndata: {}\n\n"
+        frames1 = normalizer.feed(chunk1)
+        # Control event filtered out
+        self.assertEqual(frames1, [])
+        # last_event_id recorded
+        self.assertEqual(normalizer.last_event_id, "1000")
+
+        # Chunk 2 & 3: streaming operations across chunks with paging token id: 4294967296
+        chunk2 = b"event: message\nid: 4294967296\ndata: {\"id\": \"op_1\", "
+        chunk3 = b"\"type\": \"payment\"}\n\n"
+        frames2 = normalizer.feed(chunk2)
+        self.assertEqual(frames2, [])
+        frames3 = normalizer.feed(chunk3)
+        self.assertEqual(len(frames3), 1)
+        self.assertEqual(normalizer.last_event_id, "4294967296")
+        ev = normalizer.parse_frame(frames3[0])
+        self.assertEqual(ev.event, "message")
+        self.assertEqual(ev.event_id, "4294967296")
+        self.assertIn("payment", ev.data)
+
+        # Chunk 4: event: byebye stream termination notice
+        chunk4 = b"event: byebye\nid: 4294967297\ndata: byebye\n\n"
+        frames4 = normalizer.feed(chunk4)
+        self.assertEqual(frames4, [])
+        self.assertEqual(normalizer.last_event_id, "4294967297")
+
+        # When skip_control_events is False, control events are yielded
+        verbose_normalizer = SSEChunkNormalizer(skip_control_events=False)
+        f_open = verbose_normalizer.feed(chunk1)
+        self.assertEqual(len(f_open), 1)
+        self.assertEqual(verbose_normalizer.last_event_id, "1000")
 
 if __name__ == "__main__":
     unittest.main()
